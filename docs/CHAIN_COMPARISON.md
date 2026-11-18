@@ -88,6 +88,25 @@ Running costs: free public Solana RPCs are heavily rate-limited, so you'll need 
 2. Use one fixed parameter set, not a grid search, so the result can't be fitted to the data.
 3. Only if it holds across splits with t ≥ 2 does phase 2 start.
 
+## Holdout test (2026-11-18): breakout 1h fails on unseen data
+
+**Status: done. The candidate failed, so the Solana port is stopped.**
+
+- **Design:** the parameters were frozen from phase 1, and the script was committed (`8290d35`) before any result existed. The test ran on hourly Solana data from *before* each token's phase 1 window, which neither the grid search nor the selection ever saw.
+- **History limit:** GeckoTerminal's free tier only reaches back about 180 days, so the holdout covers 2026-04 to mid-2026. Full report: `reports/holdout-solana-breakout1h.md`; rerun with `npm run holdout-solana`.
+
+| Window | Costs | Trades | Expectancy/trade | Profit factor | t-stat |
+|---|---|---|---|---|---|
+| **Holdout (never seen)** | pool fee (0.6% round trip) | 59 | **−1.44%** | 0.60 | −1.73 |
+| **Holdout (never seen)** | low cost (0.05%) | 58 | **−0.52%** | 0.83 | −0.61 |
+| Phase 1 window | pool fee | 89 | +0.01% | 1.00 | 0.01 |
+| Phase 1 window | low cost | 89 | +0.61% | 1.21 | 0.81 |
+
+- **Most tokens lost:** 9 of the 10 tokens that traded lost money in the holdout. The only gains were small (JUP and BONK).
+- **Why the phase 1 result didn't hold:** the small profit seen in phase 1 came from the same months the parameters were picked on. It does not carry over to other months.
+
+**Conclusion:** none of the trend-following strategies tested shows an edge, on BNB Chain or on Solana, at any cost level. That covers pullback and breakout, on 5-minute and 1-hour bars. Building a Solana trading module would not change that, so the port is stopped. The code added for phase 1 stays as a research tool. The BNB bot keeps paper-trading, and its live gate stays shut.
+
 ## Sources
 
 Live data:
