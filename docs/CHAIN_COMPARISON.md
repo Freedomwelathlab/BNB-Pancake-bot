@@ -45,7 +45,7 @@ Each phase has an exit test. If a phase fails, stop and stay in paper mode on BN
 | Phase | Work | Exit test | Rough effort |
 |---|---|---|---|
 | 0. Find an edge (any chain) | New strategy ideas tested with `--cost=lowcost` on the existing data | Out-of-sample profit factor ≥ 1.3 and t-stat ≥ 2 **before** chain-specific costs | ongoing research |
-| 1. Solana data | Point `src/data/gecko.ts` at GeckoTerminal's `solana` network, pick 5–10 deep USDC and SOL pools, backtest with Solana costs (0.01–0.05% pool fee, about $0.001 gas) | Same gate thresholds as now | 1–2 days |
+| 1. Solana data ✅ done 2026-11-18 | Solana data layer, on-chain mint screen, `--chain=solana` backtest with Solana costs | Same gate thresholds as now: **not met** (see Phase 1 result below) | done |
 | 2. Solana execution | New `SolanaExecutor`: quotes and swaps from the Jupiter Swap API, a priority-fee cap, tight slippage, Jito DontFront, and an allowlist of the Jupiter program plus your own token accounts only (the same "can't withdraw" rule) | Tests pass; simulated transactions only | 3–5 days |
 | 3. Solana safety | GoPlus Solana token-security endpoint plus mint and freeze-authority checks; reject tokens whose mint or freeze authority is still active | Screen passes known-good tokens and rejects known rugs | 1–2 days |
 | 4. Paper trading | Run in paper mode beside the BNB bot | 30+ paper trades with positive net PnL | 2–4 weeks |
@@ -56,6 +56,37 @@ What carries over unchanged: the risk engine, exits, backtester, metrics, eviden
 Running costs: free public Solana RPCs are heavily rate-limited, so you'll need a free-tier key from an RPC provider. Check its current limits before relying on it. Your laptop or PC is enough to run it.
 
 **The fallback is Base.** The same code runs with new contract addresses (Uniswap or Aerodrome routers, WETH) and a new chain id. That's about 1–2 days of work. A round trip costs about 0.1–0.15% at $12 and is near zero at $500.
+
+## Phase 1 result (2026-11-18): Solana data and backtest
+
+**Status: done. The exit test was NOT met, so phase 2 (Solana execution) stays on hold.**
+
+- **Universe:** 11 SOL-quoted pools: WETH, WBTC, cbBTC, JUP, PYTH, BONK, WIF, RAY, JTO, ORCA and CLAUDIA.
+  - They passed age (≥ 30 days), liquidity (≥ $150k), wash-trading and on-chain mint checks.
+  - 6 tokens were rejected for live freeze or mint authority, or for armed Token-2022 extensions: USDC, USDT, USDG, ZEC, HYPE and SPCX.
+- **Data:** 90 days of 5-minute bars, priced in SOL (`npm run fetch-history-solana`).
+- **Method:** the same walk-forward test and grid as BNB Chain (`npm run backtest -- 0.6 --chain=solana`).
+- **Pool-fee cost model:** 0.25–0.30% fee per leg, 0.00002 SOL gas, 5% failed transactions. That gives an average round trip of 0.61%. This is conservative, because Jupiter routes on majors measured 0.00–0.04%.
+
+| Variant | Out-of-sample, 60/40 split | Out-of-sample, 50/50 split | 60/40 at low cost (0.05% round trip) |
+|---|---|---|---|
+| Pullback 5m | 70 trades, −0.57%/trade, PF 0.39 | 84 trades, −0.62%, PF 0.35 | +0.05%, PF 1.10, t 0.30 |
+| Breakout 5m | 506 trades, −0.63%, PF 0.65 | 844 trades, −0.71%, PF 0.40 | −0.02%, PF 0.99 |
+| Pullback 1h | 43 trades, −0.69%, PF 0.68 | too few | −0.09%, PF 0.95 |
+| **Breakout 1h** | 56 trades, **+0.36%**, PF 1.12, t 0.39 | 154 trades, **−1.11%**, PF 0.55 | **+0.97%**, PF 1.36, t 1.04 |
+
+**Reading it:**
+- Breakout on 1-hour bars is the first variant to show a profit out of sample on either chain. It isn't evidence yet, for three reasons:
+  - It flips to a clear loss on the 50/50 split.
+  - Even at near-zero cost its t-stat is 1.04, against the gate's minimum of 2.
+  - The in-sample selection rule picked pullback 1h, not breakout 1h.
+- Everything else loses, as on BNB Chain.
+- Solana's real swap cost on majors lies between the two cost models, so a cheaper chain helps, but it does not create an edge.
+
+**Next research step, still phase 0:**
+1. Test breakout 1h alone on more Solana history (180+ days) and on more tokens.
+2. Use one fixed parameter set, not a grid search, so the result can't be fitted to the data.
+3. Only if it holds across splits with t ≥ 2 does phase 2 start.
 
 ## Sources
 

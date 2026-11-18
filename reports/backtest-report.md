@@ -1,10 +1,10 @@
 # Backtest evaluation
 
-Generated 2026-11-17T15:35:58.161Z
+Generated 2026-11-18T03:22:10.030Z
 
 ## Data and assumptions
 
-- Universe: 5 WBNB pools on PancakeSwap (LINK, BTCB, DOGE, SKYAI, ETH), chosen by CURRENT volume and liquidity -> survivorship bias (pools that died are absent; results are optimistic).
+- Chain: bsc. Universe: 5 WBNB-quoted PancakeSwap pools (LINK, BTCB, DOGE, SKYAI, ETH), chosen by CURRENT volume and liquidity -> survivorship bias (pools that died are absent; results are optimistic).
 - Data: GeckoTerminal 5-minute OHLCV priced in WBNB. Fills at next bar open + 5bps latency; stop fills assume worst intrabar order.
 - Costs: per-pool swap fee both legs, constant-product price impact (V2-equivalent depth from current TVL, conservative for V3), gas 0.00002 BNB/swap, 3% failed-tx gas, zero-tax tokens only.
 - Parameters chosen on the first 60% of the window (in-sample) and judged only on the rest (out-of-sample). 96 parameter sets tested across 4 variants (2 strategies x 5m/1h); the in-sample winner is biased upward by multiple testing. The variant sent to the evidence gate is chosen by IN-SAMPLE expectancy only.
