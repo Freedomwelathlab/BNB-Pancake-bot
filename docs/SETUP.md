@@ -66,7 +66,7 @@ ssh bot@YOUR_SERVER_IP
 ```
 
 ```bash
-git clone https://github.com/Freedomwelathlab/BNB-Snipping-bot.git bnb-bot && cd bnb-bot
+git clone https://github.com/Freedomwelathlab/BNB-Pancake-bot.git bnb-bot && cd bnb-bot
 ```
 
 (or copy the folder with `scp -r`; do not copy `.env` or `secrets/` over insecure channels)
