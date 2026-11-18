@@ -70,7 +70,9 @@ export class Rpc {
       this.ws = createPublicClient({ chain: bsc, transport: webSocket(url, { reconnect: { attempts: 3, delay: 2_000 }, keepAlive: { interval: 15_000 } }) }) as PublicClient;
       this.health.wsUrl = url;
       const un = this.ws.watchBlocks({
-        onBlock: (b) => this.onHead(b.number),
+        onBlock: (b) => {
+          if (b?.number != null) this.onHead(b.number);
+        },
         onError: (e) => {
           log.warn('ws_block_error', { url, err: String(e).slice(0, 200) });
           void this.rotate();

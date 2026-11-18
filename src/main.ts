@@ -77,4 +77,4 @@ const shutdown = async (sig: string) => {
 };
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
-process.on('unhandledRejection', (e) => log.error('unhandled_rejection', { err: String(e).slice(0, 400) }));
+process.on('unhandledRejection', (e) => log.error('unhandled_rejection', { err: String(e).slice(0, 300), stack: (e instanceof Error ? e.stack ?? '' : '').split('\n').slice(1, 6).join(' | ').slice(0, 600) }));
