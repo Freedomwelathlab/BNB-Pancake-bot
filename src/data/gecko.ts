@@ -123,7 +123,15 @@ export async function fetchOhlcv(pool: string, token: string, timeframe: 'minute
   let before: number | undefined;
   while (rows.size < maxBars) {
     const url = `${BASE}/networks/${network}/pools/${pool}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=1000&currency=token&token=${token}` + (before ? `&before_timestamp=${before}` : '');
-    const j = await getJson<{ data: { attributes: { ohlcv_list: [number, number, number, number, number, number][] } } }>(url, { minSpacingMs: SPACING });
+    let j: { data: { attributes: { ohlcv_list: [number, number, number, number, number, number][] } } };
+    try {
+      j = await getJson(url, { minSpacingMs: SPACING });
+    } catch (e) {
+      // The free tier refuses requests reaching too far back (HTTP 401, about 180 days):
+      // keep what we already have instead of losing the whole series.
+      if (rows.size > 0 && /HTTP 401/.test(String(e))) break;
+      throw e;
+    }
     const list = j.data?.attributes?.ohlcv_list ?? [];
     if (list.length === 0) break;
     for (const [t, o, h, l, c, v] of list) if (o > 0 && c > 0) rows.set(t, { t, o, h, l, c, v });

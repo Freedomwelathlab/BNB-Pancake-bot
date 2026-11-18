@@ -24,12 +24,14 @@ const outDir = './data/history/solana-1h';
 mkdirSync(outDir, { recursive: true });
 const universe = JSON.parse(readFileSync(`${srcDir}/_universe.json`, 'utf8')) as { selected: PoolInfo[] };
 
-// Start of the phase 1 (5-minute) window: everything before it is untouched holdout data.
-let phase1Start = Infinity;
+// Start of each token's phase 1 (5-minute) data: everything before it is untouched holdout data.
+// Per token, because thinly traded pools' 5m files reach further back.
+const phase1Start = new Map<string, number>();
 for (const p of universe.selected) {
   const f = `${srcDir}/${p.pool}.json`;
-  if (existsSync(f)) phase1Start = Math.min(phase1Start, (JSON.parse(readFileSync(f, 'utf8')) as { candles: { t: number }[] }).candles[0]!.t);
+  if (existsSync(f)) phase1Start.set(p.token, (JSON.parse(readFileSync(f, 'utf8')) as { candles: { t: number }[] }).candles[0]!.t);
 }
+const p1 = (s: { token: string }) => phase1Start.get(s.token) ?? 0;
 
 const series: (SeriesInput & { symbol: string })[] = [];
 for (const p of universe.selected) {
@@ -54,8 +56,11 @@ for (const p of universe.selected) {
 const poolFee: ExecModel = { feeBps: 30, buyTaxBps: 0, sellTaxBps: 0, gasBnbPerSwap: 0.00002, failureProb: 0.05, latencySlippageBps: 5 };
 const lowCost: ExecModel = { feeBps: 1, buyTaxBps: 0, sellTaxBps: 0, gasBnbPerSwap: 0.00002, failureProb: 0.03, latencySlippageBps: 2 };
 
-function run(from: number, to: number, ex: ExecModel, deep: boolean): Trade[] {
+type Range = (s: SeriesInput) => [number, number];
+function run(range: Range, ex: ExecModel, deep: boolean): Trade[] {
   return series.flatMap((s) => {
+    const [from, to] = range(s);
+    if (!(from < to)) return [];
     const iFrom = s.candles.findIndex((c) => c.t >= from);
     if (iFrom < 0) return [];
     const iTo = s.candles.findIndex((c) => c.t >= to);
@@ -81,10 +86,11 @@ const gate = (m: Metrics) => {
   return r.length ? `FAIL (${r.join(', ')})` : 'PASS';
 };
 
-const windows: [string, number, number][] = [
-  [`**Holdout** ${d(t0)} -> ${d(phase1Start)} (never seen)`, t0, phase1Start],
-  [`Phase 1 window ${d(phase1Start)} -> ${d(t1)} (parameters were tuned on part of it)`, phase1Start, t1],
-  [`Full ${d(t0)} -> ${d(t1)}`, t0, t1],
+const p1min = Math.min(...series.map(p1)), p1max = Math.max(...series.map(p1));
+const windows: [string, Range][] = [
+  [`**Holdout** ${d(t0)} -> each token's phase 1 start (${d(p1min)}..${d(p1max)}); never seen`, (s) => [t0, p1(s)]],
+  [`Phase 1 window -> ${d(t1)} (parameters were tuned on part of it)`, (s) => [p1(s), t1]],
+  [`Full ${d(t0)} -> ${d(t1)}`, () => [t0, t1]],
 ];
 let md = `# Solana holdout test: breakout 1h, fixed parameters\n\nGenerated ${new Date().toISOString()}\n\n`;
 md += `- Parameters frozen from phase 1 (no search): \`${JSON.stringify(PARAMS)}\`, exits \`${JSON.stringify(EXIT)}\`.\n`;
@@ -92,9 +98,9 @@ md += `- Universe: ${series.map((s) => s.symbol).join(', ')} (the phase 1 univer
 md += `- Size ${SIZE} SOL on ${CAPITAL} SOL. Pool-fee costs: each pool's 0.25-0.30% fee per leg, 0.00002 SOL gas, 5% failed tx. Low-cost: 0.01% fee, pools 100x deeper.\n\n`;
 md += `| Window | Costs | Trades | Win rate | Net SOL | Expectancy/trade | PF | t-stat | Max DD | Gate thresholds |\n|---|---|---|---|---|---|---|---|---|---|\n`;
 const results: Record<string, Metrics> = {};
-for (const [label, a, b] of windows)
+for (const [label, range] of windows)
   for (const [cl, ex, deep] of [['pool fee', poolFee, false], ['low cost', lowCost, true]] as const) {
-    const m = computeMetrics(run(a, b, ex, deep), CAPITAL);
+    const m = computeMetrics(run(range, ex, deep), CAPITAL);
     results[`${label}|${cl}`] = m;
     md += `| ${label} | ${cl} ${fmt(m)} ${gate(m)} |\n`;
   }
@@ -102,15 +108,15 @@ for (const [label, a, b] of windows)
 // Stability: holdout by quarter and by token (pool-fee costs).
 md += `\n## Holdout stability (pool-fee costs)\n\n| Period | Trades | Expectancy/trade | PF |\n|---|---|---|---|\n`;
 const q = 91 * 86400;
-for (let a = t0; a < phase1Start; a += q) {
-  const m = computeMetrics(run(a, Math.min(a + q, phase1Start), poolFee, false), CAPITAL);
-  md += `| ${d(a)} -> ${d(Math.min(a + q, phase1Start))} | ${m.trades} | ${m.expectancyPct.toFixed(3)}% | ${Number.isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : 'inf'} |\n`;
+for (let a = t0; a < p1max; a += q) {
+  const m = computeMetrics(run((s) => [a, Math.min(a + q, p1(s))], poolFee, false), CAPITAL);
+  md += `| ${d(a)} -> ${d(Math.min(a + q, p1max))} | ${m.trades} | ${m.expectancyPct.toFixed(3)}% | ${Number.isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : 'inf'} |\n`;
 }
-const hold = run(t0, phase1Start, poolFee, false);
+const hold = run((s) => [t0, p1(s)], poolFee, false);
 md += `\n| Token | Holdout trades | Net SOL |\n|---|---|---|\n`;
 for (const s of series) {
   const tr = hold.filter((t) => t.token === s.token);
-  md += `| ${s.symbol} | ${tr.length} | ${tr.reduce((a, t) => a + t.pnlBnb, 0).toFixed(4)} |\n`;
+  md += `| ${s.symbol} (holdout ${d(s.candles[0]!.t)} -> ${d(p1(s))}) | ${tr.length} | ${tr.reduce((a, t) => a + t.pnlBnb, 0).toFixed(4)} |\n`;
 }
 mkdirSync('./reports', { recursive: true });
 writeFileSync('./reports/holdout-solana-breakout1h.md', md);
