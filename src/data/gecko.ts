@@ -10,12 +10,13 @@ export interface PoolInfo {
   pool: string;
   name: string;
   dex: string;
-  token: string; // non-WBNB side
+  token: string; // non-quote side (quote = WBNB on BSC, wrapped SOL on Solana)
   tokenSymbol: string;
   feeBps: number;
   createdAt: number; // unix s
   reserveUsd: number;
-  bnbPriceUsd: number; // implied from the pool
+  bnbPriceUsd: number; // USD price of the quote asset (BNB or SOL), implied from the pool
+  network?: Network;
   volume24hUsd: number;
 }
 
@@ -24,7 +25,15 @@ interface GPool {
   relationships: { base_token: { data: { id: string } }; quote_token: { data: { id: string } }; dex: { data: { id: string } } };
 }
 
-const strip = (id: string) => id.replace(/^bsc_/, '').toLowerCase();
+export type Network = 'bsc' | 'solana';
+export const WSOL = 'So11111111111111111111111111111111111111112';
+
+// GeckoTerminal ids look like "bsc_0xabc" / "solana_So111...". EVM addresses are
+// case-insensitive (normalised to lowercase); Solana base58 addresses are case-sensitive.
+const strip = (id: string, network: Network) => {
+  const raw = id.slice(id.indexOf('_') + 1);
+  return network === 'solana' ? raw : raw.toLowerCase();
+};
 
 export function parseFeeBps(name: string, dex: string): number {
   const m = name.match(/(\d+(?:\.\d+)?)%/);
@@ -39,23 +48,23 @@ export async function poolsForTokens(tokens: string[]): Promise<PoolInfo[]> {
   const out: PoolInfo[] = [];
   for (const t of tokens) {
     const j = await getJson<{ data: GPool[] }>(`${BASE}/networks/bsc/tokens/${t}/pools`, { minSpacingMs: SPACING });
-    const pools = j.data.map((p) => toInfo(p, wbnb)).filter((p): p is PoolInfo => p !== null && /pancakeswap/i.test(p.dex));
+    const pools = j.data.map((p) => toInfo(p, wbnb, 'bsc')).filter((p): p is PoolInfo => p !== null && /pancakeswap/i.test(p.dex));
     const best = pools.sort((a, b) => b.reserveUsd - a.reserveUsd)[0];
     if (best) out.push(best);
   }
   return out;
 }
 
-function toInfo(p: GPool, wbnb: string): PoolInfo | null {
-  const base = strip(p.relationships.base_token.data.id);
-  const quote = strip(p.relationships.quote_token.data.id);
+function toInfo(p: GPool, wbnb: string, network: Network): PoolInfo | null {
+  const base = strip(p.relationships.base_token.data.id, network);
+  const quote = strip(p.relationships.quote_token.data.id, network);
   if (base !== wbnb && quote !== wbnb) return null;
   const tokenIsBase = quote === wbnb;
   const token = tokenIsBase ? base : quote;
   if (token === wbnb) return null;
   const bnbUsd = tokenIsBase ? Number(p.attributes.quote_token_price_usd) : Number(p.attributes.base_token_price_usd);
   return {
-    pool: p.attributes.address.toLowerCase(),
+    pool: network === 'solana' ? p.attributes.address : p.attributes.address.toLowerCase(),
     name: p.attributes.name,
     dex: p.relationships.dex.data.id,
     token,
@@ -65,17 +74,40 @@ function toInfo(p: GPool, wbnb: string): PoolInfo | null {
     reserveUsd: Number(p.attributes.reserve_in_usd),
     bnbPriceUsd: bnbUsd,
     volume24hUsd: Number(p.attributes.volume_usd.h24),
+    network,
   };
 }
 
 /** Top WBNB-paired pools on BSC by 24h volume. NOTE: selecting by today's ranking introduces survivorship bias. */
 export async function discoverWbnbPools(pages = 5): Promise<PoolInfo[]> {
-  const wbnb = ADDR.WBNB.toLowerCase();
+  return discoverPools('bsc', ADDR.WBNB.toLowerCase(), pages);
+}
+
+/** Deepest `quote`-paired pool for each token on any DEX (seed universe for non-BSC chains). */
+export async function deepestPools(network: Network, quote: string, tokens: string[]): Promise<PoolInfo[]> {
+  const out: PoolInfo[] = [];
+  for (const t of tokens) {
+    try {
+      const j = await getJson<{ data: GPool[] }>(`${BASE}/networks/${network}/tokens/${t}/pools`, { minSpacingMs: SPACING });
+      const best = j.data
+        .map((p) => toInfo(p, quote, network))
+        .filter((p): p is PoolInfo => p !== null)
+        .sort((a, b) => b.reserveUsd - a.reserveUsd)[0];
+      if (best) out.push(best);
+    } catch {
+      // token unknown to GeckoTerminal: skip
+    }
+  }
+  return out;
+}
+
+/** Top pools quoted in `quote` (WBNB on BSC, WSOL on Solana) by 24h volume. Same survivorship caveat. */
+export async function discoverPools(network: Network, quote: string, pages = 5): Promise<PoolInfo[]> {
   const out: PoolInfo[] = [];
   for (let page = 1; page <= pages; page++) {
-    const j = await getJson<{ data: GPool[] }>(`${BASE}/networks/bsc/pools?sort=h24_volume_usd_desc&page=${page}`, { minSpacingMs: SPACING });
+    const j = await getJson<{ data: GPool[] }>(`${BASE}/networks/${network}/pools?sort=h24_volume_usd_desc&page=${page}`, { minSpacingMs: SPACING });
     for (const p of j.data) {
-      const info = toInfo(p, wbnb);
+      const info = toInfo(p, quote, network);
       if (info) out.push(info);
     }
   }
@@ -86,11 +118,11 @@ export async function discoverWbnbPools(pages = 5): Promise<PoolInfo[]> {
  * OHLCV of `token` priced in the pool's other token (WBNB), oldest first.
  * timeframe: minute|hour|day with aggregate (e.g. minute+5 = 5m bars).
  */
-export async function fetchOhlcv(pool: string, token: string, timeframe: 'minute' | 'hour' | 'day', aggregate: number, maxBars: number, onPage?: (n: number) => void): Promise<Candle[]> {
+export async function fetchOhlcv(pool: string, token: string, timeframe: 'minute' | 'hour' | 'day', aggregate: number, maxBars: number, onPage?: (n: number) => void, network: Network = 'bsc'): Promise<Candle[]> {
   const rows = new Map<number, Candle>();
   let before: number | undefined;
   while (rows.size < maxBars) {
-    const url = `${BASE}/networks/bsc/pools/${pool}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=1000&currency=token&token=${token}` + (before ? `&before_timestamp=${before}` : '');
+    const url = `${BASE}/networks/${network}/pools/${pool}/ohlcv/${timeframe}?aggregate=${aggregate}&limit=1000&currency=token&token=${token}` + (before ? `&before_timestamp=${before}` : '');
     const j = await getJson<{ data: { attributes: { ohlcv_list: [number, number, number, number, number, number][] } } }>(url, { minSpacingMs: SPACING });
     const list = j.data?.attributes?.ohlcv_list ?? [];
     if (list.length === 0) break;

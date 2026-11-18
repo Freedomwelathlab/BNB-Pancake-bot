@@ -6,6 +6,7 @@
     "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx src/main.ts",
     "backtest": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/backtest.ts",
     "fetch-history": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/fetchHistory.ts",
+    "fetch-history-solana": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/fetchHistorySolana.ts",
     "status": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/status.ts",
     "kill": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/killswitch.ts",
     "check-token": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/checkToken.ts",
