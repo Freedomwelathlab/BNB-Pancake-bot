@@ -1,14 +1,16 @@
 {
-  "name": "bnb-edge-bot",
+  "name": "bnb-snipping-bot",
   "version": "0.1.0",
   "description": "Evidence-gated BNB Chain trading bot. Paper mode by default.",
   "scripts": {
-    "start": "node --disable-warning=ExperimentalWarning --import tsx src/main.ts",
-    "backtest": "node --disable-warning=ExperimentalWarning --import tsx scripts/backtest.ts",
-    "fetch-history": "node --disable-warning=ExperimentalWarning --import tsx scripts/fetchHistory.ts",
-    "status": "node --disable-warning=ExperimentalWarning --import tsx scripts/status.ts",
-    "kill": "node --disable-warning=ExperimentalWarning --import tsx scripts/killswitch.ts",
-    "check-token": "node --disable-warning=ExperimentalWarning --import tsx scripts/checkToken.ts",
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx src/main.ts",
+    "backtest": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/backtest.ts",
+    "fetch-history": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/fetchHistory.ts",
+    "status": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/status.ts",
+    "kill": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/killswitch.ts",
+    "check-token": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/checkToken.ts",
+    "wallet": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/wallet.ts",
+    "telegram-setup": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning --import tsx scripts/telegramSetup.ts",
     "test": "node --disable-warning=ExperimentalWarning --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
