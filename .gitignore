@@ -2,9 +2,9 @@ node_modules/
 .env
 .env.*
 !.env.example
-secrets/
-data/
-backups/
+/secrets/
+/data/
+/backups/
 reports/*.json
 !reports/.gitkeep
 *.db

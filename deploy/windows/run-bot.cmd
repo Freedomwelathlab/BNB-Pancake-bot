@@ -3,7 +3,7 @@ rem Runs the bot forever on Windows, restarting it 30 s after any exit.
 rem Started hidden at logon by the "BNB Snipping Bot" scheduled task (install-autostart.cmd).
 cd /d "%~dp0\..\.."
 if not exist data mkdir data
-if exist dataSTOP del dataSTOP
+if exist data\STOP del data\STOP
 :loop
 for %%A in (data\bot.log) do if %%~zA GTR 20000000 move /y data\bot.log data\bot.log.1 >nul
 echo {"msg":"wrapper_start","t":"%date% %time%"}>> data\bot.log
