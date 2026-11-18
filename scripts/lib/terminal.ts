@@ -27,10 +27,13 @@ export function readHidden(prompt: string): Promise<string> {
           process.exit(130);
         }
         if (ch === '\u007f' || ch === '\b') {
+          if (value.length) process.stdout.write('\b \b');
           value = value.slice(0, -1);
           continue;
         }
+        if (ch < ' ') continue; // ignore other control keys (e.g. Ctrl+V sent as a raw byte)
         value += ch;
+        process.stdout.write('*'); // shows the paste arrived without revealing it
       }
     };
     stdin.on('data', onData);

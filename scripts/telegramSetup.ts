@@ -21,7 +21,9 @@ Step 1. In Telegram, open @BotFather, send /newbot, pick a name and a username
         Keep it private: anyone with it can post as your bot.
 `);
 
-const token = await readHidden('Step 2. Paste the bot token here (hidden), then press Enter: ');
+console.log('Step 2. Paste the bot token below (right-click or Ctrl+Shift+V if Ctrl+V does nothing).');
+console.log('        You will see one * per character; then press Enter.');
+const token = await readHidden('        Token: ');
 if (!/^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(token)) {
   console.error('That does not look like a BotFather token (digits:letters). Nothing was saved.');
   process.exit(1);
