@@ -1,6 +1,8 @@
 // Walk-forward evaluation on downloaded history. Writes reports/latest-evaluation.json
 // (read by the evidence gate) and a human-readable markdown report.
-// Usage: npm run backtest -- [splitFrac=0.6]
+// Usage: npm run backtest -- [splitFrac=0.6] [--cost=bsc|lowcost]
+// --cost=lowcost is a what-if: 0.01% swap fee, ~$0.001 gas and 100x deeper pools
+// (roughly Solana/Base majors). It writes its own report and never feeds the gate.
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { loadConfig } from '../src/core/config.ts';
 import { fillGaps, resample } from '../src/data/gecko.ts';
@@ -13,7 +15,11 @@ import type { EvaluationReport } from '../src/gate/evidence.ts';
 import type { Metrics } from '../src/backtest/metrics.ts';
 import type { PoolInfo } from '../src/data/gecko.ts';
 
-const splitFrac = Number(process.argv[2] ?? 0.6);
+const args = process.argv.slice(2);
+const splitFrac = Number(args.find((a) => !a.startsWith('--')) ?? 0.6);
+const costProfile = (args.find((a) => a.startsWith('--cost='))?.slice(7) ?? 'bsc') as 'bsc' | 'lowcost';
+if (!['bsc', 'lowcost'].includes(costProfile)) throw new Error('--cost must be bsc or lowcost');
+const lowCost = costProfile === 'lowcost';
 const cfg = loadConfig();
 const dir = './data/history';
 const files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.startsWith('_'));
@@ -27,14 +33,16 @@ for (const f of files) {
   const j = JSON.parse(readFileSync(`${dir}/${f}`, 'utf8')) as { pool: PoolInfo; barSeconds: number; candles: SeriesInput['candles'] };
   if (j.candles.length < 2000) continue;
   const reserveBnbNow = j.pool.bnbPriceUsd > 0 ? j.pool.reserveUsd / 2 / j.pool.bnbPriceUsd : 0;
-  series.push({ token: j.pool.token, symbol: j.pool.tokenSymbol, candles: fillGaps(j.candles, j.barSeconds), barSeconds: j.barSeconds, reserveBnbNow, feeBps: j.pool.feeBps });
+  series.push({ token: j.pool.token, symbol: j.pool.tokenSymbol, candles: fillGaps(j.candles, j.barSeconds), barSeconds: j.barSeconds, reserveBnbNow: lowCost ? reserveBnbNow * 100 : reserveBnbNow, feeBps: lowCost ? 1 : j.pool.feeBps });
 }
 const first = Math.min(...series.map((s) => s.candles[0]!.t));
 const last = Math.max(...series.map((s) => s.candles.at(-1)!.t));
 console.log(`series: ${series.length}, window ${new Date(first * 1000).toISOString().slice(0, 10)} -> ${new Date(last * 1000).toISOString().slice(0, 10)}`);
 
 // Gas: ~150k gas/swap at the observed 0.05 gwei = 0.0000075 BNB; use 0.00002 to cover spikes and approvals.
-const ex: ExecModel = { feeBps: 25, buyTaxBps: 0, sellTaxBps: 0, gasBnbPerSwap: 0.00002, failureProb: 0.03, latencySlippageBps: 5 };
+const ex: ExecModel = lowCost
+  ? { feeBps: 1, buyTaxBps: 0, sellTaxBps: 0, gasBnbPerSwap: 0.000002, failureProb: 0.03, latencySlippageBps: 2 }
+  : { feeBps: 25, buyTaxBps: 0, sellTaxBps: 0, gasBnbPerSwap: 0.00002, failureProb: 0.03, latencySlippageBps: 5 };
 const size = cfg.MAX_TRADE_BNB;
 const capital = cfg.PAPER_START_BNB;
 
@@ -75,6 +83,7 @@ const fmt = (m: Metrics | null) =>
   m ? `| ${m.trades} | ${m.winRatePct.toFixed(1)}% | ${m.netPnlBnb.toFixed(5)} | ${m.expectancyPct.toFixed(3)}% | ${Number.isFinite(m.profitFactor) ? m.profitFactor.toFixed(2) : 'inf'} | ${m.tStat.toFixed(2)} | ${m.maxDrawdownPctOfCapital.toFixed(1)}% | ${m.riskOfRuinPct.toFixed(1)}% |` : '| - | - | - | - | - | - | - | - |';
 
 const notes = [
+  ...(lowCost ? ['WHAT-IF COST PROFILE (lowcost): 0.01% fee per leg, 0.000002 BNB gas, 2 bps latency, pools 100x deeper. Not used by the evidence gate.'] : []),
   `Universe: ${series.length} WBNB pools on PancakeSwap (${series.map((s) => s.symbol).join(', ')}), chosen by CURRENT volume and liquidity -> survivorship bias (pools that died are absent; results are optimistic).`,
   `Data: GeckoTerminal 5-minute OHLCV priced in WBNB. Fills at next bar open + ${ex.latencySlippageBps}bps latency; stop fills assume worst intrabar order.`,
   `Costs: per-pool swap fee both legs, constant-product price impact (V2-equivalent depth from current TVL, conservative for V3), gas ${ex.gasBnbPerSwap} BNB/swap, ${ex.failureProb * 100}% failed-tx gas, zero-tax tokens only.`,
@@ -108,7 +117,7 @@ for (const r of results) {
 
 // Choose the variant for the gate by IN-SAMPLE expectancy (choosing by OOS would leak the test set).
 const best = results.filter((r) => r.inSample && r.outOfSample).sort((a, b) => b.inSample!.expectancyPct - a.inSample!.expectancyPct)[0];
-if (best?.outOfSample) {
+if (best?.outOfSample && !lowCost) {
   const report: EvaluationReport = {
     generatedAt: new Date().toISOString(),
     strategy: best.strategy,
@@ -122,6 +131,7 @@ if (best?.outOfSample) {
   };
   writeFileSync('./reports/latest-evaluation.json', JSON.stringify(report, null, 2));
 }
-if (best) md += `\n**Variant sent to the evidence gate:** ${best.variant} (highest in-sample expectancy). The gate decides pass/fail from its out-of-sample row.\n`;
-writeFileSync('./reports/backtest-report.md', md);
+if (best && lowCost) md += `\n**What-if only:** nothing from this report is sent to the evidence gate.\n`;
+else if (best) md += `\n**Variant sent to the evidence gate:** ${best.variant} (highest in-sample expectancy). The gate decides pass/fail from its out-of-sample row.\n`;
+writeFileSync(lowCost ? './reports/backtest-report-lowcost.md' : './reports/backtest-report.md', md);
 console.log(md);

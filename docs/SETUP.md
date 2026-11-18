@@ -66,7 +66,7 @@ ssh bot@YOUR_SERVER_IP
 ```
 
 ```bash
-git clone <your-private-repo-url> BNB-Sniping-Bot && cd BNB-Sniping-Bot
+git clone https://github.com/Freedomwelathlab/BNB-Snipping-bot.git bnb-bot && cd bnb-bot
 ```
 
 (or copy the folder with `scp -r`; do not copy `.env` or `secrets/` over insecure channels)
@@ -107,7 +107,7 @@ Then open http://127.0.0.1:8787 on your computer. Never open port 8787 in the fi
 crontab -e
 ```
 
-Add `15 0 * * * /home/bot/BNB-Sniping-Bot/deploy/backup.sh >> /home/bot/backup.log 2>&1`. Copy `~/bot-backups` off the server now and then, for example with `scp` to your PC.
+Add `15 0 * * * /home/bot/bnb-bot/deploy/backup.sh >> /home/bot/backup.log 2>&1`. Copy `~/bot-backups` off the server now and then, for example with `scp` to your PC.
 
 ## 7. Going live (only if the gate passes)
 

@@ -1,8 +1,6 @@
 @echo off
-rem Registers a per-user scheduled task that starts the bot hidden when you log on,
-rem then starts it now. No admin rights needed. Remove with uninstall-autostart.cmd.
+rem Starts the bot hidden whenever you log on (shortcut in your Startup folder,
+rem no admin rights needed), then starts it now. Remove with uninstall-autostart.cmd.
 set "RUNNER=%~dp0run-bot.cmd"
-schtasks /Create /F /TN "BNB Snipping Bot" /SC ONLOGON /RL LIMITED /TR "conhost.exe --headless cmd.exe /c \"%RUNNER%\"" || exit /b 1
-powershell -NoProfile -Command "$s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0 -MultipleInstances IgnoreNew; Set-ScheduledTask -TaskName 'BNB Snipping Bot' -Settings $s | Out-Null"
-schtasks /Run /TN "BNB Snipping Bot"
-echo Bot started in the background. Dashboard: http://127.0.0.1:8787  Log: data\bot.log
+powershell -NoProfile -Command "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Startup') + '\BNB Snipping Bot.lnk'); $s.TargetPath = \"$env:WINDIR\System32\conhost.exe\"; $s.Arguments = '--headless cmd.exe /c \"%RUNNER%\"'; $s.WindowStyle = 7; $s.Description = 'BNB Snipping bot (paper mode)'; $s.Save()" || exit /b 1
+call "%~dp0start-bot.cmd"

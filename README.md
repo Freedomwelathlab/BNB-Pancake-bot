@@ -1,4 +1,4 @@
-# BNB Edge Bot
+# BNB Snipping bot
 
 A 24/7 BNB Chain trading bot whose single goal is to grow a hot wallet's **net BNB balance**, and which **refuses to trade live without evidence of an edge**.
 
@@ -44,6 +44,17 @@ npm start
 
 Dashboard: http://127.0.0.1:8787 · Status: `npm run status` · Kill switch: `npm run kill -- on`
 
+## Run on a Windows laptop or PC (no Docker)
+
+```
+npm ci
+npm run wallet -- new                       # dedicated bot wallet; key goes to secrets/, never printed
+npm run telegram-setup                      # optional: paste the @BotFather token at a hidden prompt
+deploy\windows\install-autostart.cmd        # start now, and at every logon (no admin needed)
+```
+
+`deploy\windows\stop-bot.cmd` stops it, `start-bot.cmd` starts it again, and `uninstall-autostart.cmd` removes the autostart. Logs go to `data\bot.log`. The bot pauses while the laptop sleeps.
+
 ## Documents
 
 | | |
@@ -56,6 +67,8 @@ Dashboard: http://127.0.0.1:8787 · Status: `npm run status` · Kill switch: `np
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Daily checks, alerts, emergencies, restore |
 | [docs/COSTS.md](docs/COSTS.md) | Oracle Free vs Singapore VPS, RPC and on-chain costs |
 | [docs/LAUNCH_CHECKLIST.md](docs/LAUNCH_CHECKLIST.md) | Must-pass list before any live trade |
+| [docs/CHAIN_COMPARISON.md](docs/CHAIN_COMPARISON.md) | Low-cost chains vs BNB Chain, measured costs, and the Solana plan |
+| [reports/backtest-report-lowcost.md](reports/backtest-report-lowcost.md) | What-if backtest with near-zero costs (still no edge) |
 
 ## Stack
 
